@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PTE Academic Simulator</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">PTE Academic — Simulator</div>
+    <div class="topbar-right">
+      <span id="task-label" class="task-label"></span>
+      <span id="timer" class="timer"></span>
+      <button id="about-btn" class="btn-ghost">📖 About</button>
+      <button id="settings-btn" class="btn-ghost">⚙ Settings</button>
+    </div>
+  </header>
+
+  <main id="app"></main>
+
+  <dialog id="welcome-dialog">
+    <div class="welcome">
+      <h2>👋 Welcome</h2>
+      <p>
+        This is a free, browser-based simulator for the <strong>PTE Academic</strong> English exam.
+        It covers all 20 task types with real audio recording and AI-powered scoring.
+      </p>
+      <p>Before you start, choose how you want subjective tasks (Speaking, Essay, Summarize) to be scored:</p>
+      <div class="welcome-options">
+        <button class="welcome-option" id="welcome-manual">
+          <div class="wo-title">💸 Free — Manual scoring <span class="wo-tag">Recommended</span></div>
+          <div class="wo-desc">The simulator copies a prompt to your clipboard. You paste it into <strong>claude.ai</strong> (Free plan works), then paste Claude's JSON response back. Zero cost.</div>
+        </button>
+        <button class="welcome-option" id="welcome-api">
+          <div class="wo-title">⚡ API — Automatic scoring</div>
+          <div class="wo-desc">Paste your own Anthropic API key. Scoring happens automatically. Costs ~AUD 0.15 per mini-exam.</div>
+        </button>
+        <button class="welcome-option" id="welcome-skip">
+          <div class="wo-title">🎯 Just objective tasks</div>
+          <div class="wo-desc">Skip both. You can still practice all MCQ, Fill-in-Blanks, Re-order, and Write-from-Dictation tasks — they're scored automatically by the browser, no AI needed.</div>
+        </button>
+      </div>
+      <p class="hint small">You can change this any time in ⚙ Settings. Your choice is stored only in this browser's localStorage — there's no server.</p>
+    </div>
+  </dialog>
+
+  <dialog id="settings-dialog">
+    <form method="dialog" class="settings-form">
+      <h2>Settings</h2>
+      <label class="checkbox-row">
+        <input type="checkbox" id="manual-mode-toggle" />
+        <span><strong>Manual scoring mode</strong> — paste prompts into claude.ai instead of using the API (no API key needed, zero cost)</span>
+      </label>
+      <fieldset id="api-fieldset">
+        <label>
+          <span>Anthropic API key (only needed when manual mode is OFF)</span>
+          <input type="password" id="api-key-input" placeholder="sk-ant-..." autocomplete="off" />
+        </label>
+      </fieldset>
+      <label>
+        <span>Preferred TTS voice</span>
+        <select id="voice-select"></select>
+      </label>
+      <label>
+        <span>Speaking rate</span>
+        <input type="range" id="voice-rate" min="0.7" max="1.2" step="0.05" value="1.0" />
+      </label>
+      <div class="settings-actions">
+        <button type="button" id="test-voice">Test voice</button>
+        <button value="save" id="save-settings">Save</button>
+      </div>
+      <p class="hint">
+        <strong>Manual mode:</strong> the simulator shows the scoring prompt, you paste it into
+        claude.ai (your work plan works fine), then paste the response back. No API key, no cost.
+        <br /><br />
+        <strong>API mode:</strong> get a personal key at console.anthropic.com. The key stays in
+        your browser — there's no backend.
+      </p>
+    </form>
+  </dialog>
+
+  <dialog id="manual-scoring-dialog">
+    <div class="manual-scoring">
+      <h2>Manual scoring</h2>
+      <p class="hint">
+        Copy the prompt below, paste it into <strong>claude.ai</strong> (or Claude Code),
+        then paste Claude's JSON response into the textarea at the bottom.
+      </p>
+
+      <div class="manual-step">
+        <div class="manual-step-header">
+          <strong>1. Copy this prompt</strong>
+          <button type="button" class="secondary" id="copy-prompt-btn">📋 Copy to clipboard</button>
+        </div>
+        <pre id="manual-prompt" class="manual-prompt-box"></pre>
+      </div>
+
+      <div class="manual-step">
+        <div class="manual-step-header">
+          <strong>2. Paste Claude's response (JSON)</strong>
+          <span id="manual-paste-status" class="muted small"></span>
+        </div>
+        <textarea id="manual-response" class="manual-response-box"
+          placeholder='{ "content": 4, "pronunciation": 4, "oral_fluency": 4, "overall_0_90": 75, "feedback": "..." }'></textarea>
+      </div>
+
+      <div class="settings-actions">
+        <button type="button" class="secondary" id="manual-skip">Skip scoring</button>
+        <button type="button" class="primary" id="manual-submit">Submit score</button>
+      </div>
+    </div>
+  </dialog>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
