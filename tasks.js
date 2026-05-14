@@ -83,8 +83,12 @@ function pick(taskId, baseArray) {
   return randomItem(pool(taskId, baseArray));
 }
 
-// Create a countdown that ticks every 100ms, updates the topbar, and resolves
-// when it finishes or `cancel()` is called.
+// The single in-flight countdown, exposed via abortActiveTask so the topbar
+// "Exit" / "Home" buttons can stop it cleanly. Without this, an old
+// countdown keeps writing to #timer after the user has navigated away,
+// making the topbar timer appear "stuck" or carry over to the next task.
+let activeCountdown = null;
+
 function countdown(seconds, onTick) {
   let cancelled = false;
   const start = performance.now();
@@ -100,12 +104,28 @@ function countdown(seconds, onTick) {
     }
     step();
   });
-  return {
+  const handle = {
     promise,
     cancel: () => {
       cancelled = true;
+      if (activeCountdown === handle) activeCountdown = null;
     },
   };
+  activeCountdown = handle;
+  return handle;
+}
+
+// Called by app.js when the user exits a task / examination mid-way.
+// Cancels the running countdown, clears the topbar timer, and stops any
+// TTS playback so the home page lands in a clean state.
+export function abortActiveTask() {
+  if (activeCountdown) {
+    activeCountdown.cancel();
+    activeCountdown = null;
+  }
+  setTopbarTimer(null);
+  setTaskLabel("");
+  stopSpeaking();
 }
 
 // Generic speaking-task flow: prep phase (display only), then recording phase.

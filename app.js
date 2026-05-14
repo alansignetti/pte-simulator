@@ -1,7 +1,8 @@
 // App shell: home picker, settings, exam mode, score display.
 
 import { TASKS, getTaskMeta } from "./content.js";
-import { runTask, setTopbarTimer, setTaskLabel, injectItem } from "./tasks.js";
+import { runTask, setTopbarTimer, setTaskLabel, injectItem, abortActiveTask } from "./tasks.js";
+import { micUnavailableReason } from "./audio.js";
 import { generateForTask, hasGenerator, generatedCount } from "./generation.js";
 import {
   getEnglishVoices,
@@ -20,6 +21,22 @@ function escapeHtml(s) {
   return String(s).replace(/[<>&"]/g, (c) => ({
     "<": "&lt;", ">": "&gt;", "&": "&amp;", '"': "&quot;",
   }[c]));
+}
+
+// ----------------- view tracking + top-bar state -----------------
+let currentView = "home"; // home | about | progress | task | exam
+
+function setView(view) {
+  currentView = view;
+  document.getElementById("about-btn").classList.toggle("active", view === "about");
+  document.getElementById("exit-task-btn").style.display = (view === "task" || view === "exam") ? "" : "none";
+}
+
+// Wrapper so we don't pollute renderHome with state code.
+function goHome() {
+  abortActiveTask();
+  setView("home");
+  renderHome();
 }
 
 // ----------------- maker / social -----------------
@@ -147,7 +164,12 @@ function renderHome() {
 function renderDocs() {
   setTopbarTimer(null);
   setTaskLabel("");
+  setView("about");
   app.innerHTML = `
+    <div class="back-row">
+      <button class="back-link" id="docs-back-top">← Back to home</button>
+      <span class="muted small">You're viewing: About</span>
+    </div>
     <div class="docs">
       <header class="docs-hero">
         <h1>PTE Academic Simulator</h1>
@@ -456,7 +478,8 @@ python3 -m http.server 8080
       </footer>
     </div>
   `;
-  app.querySelector("#docs-back").addEventListener("click", renderHome);
+  app.querySelector("#docs-back").addEventListener("click", goHome);
+  app.querySelector("#docs-back-top").addEventListener("click", goHome);
   window.scrollTo(0, 0);
 }
 
@@ -464,6 +487,7 @@ python3 -m http.server 8080
 function renderProgress() {
   setTopbarTimer(null);
   setTaskLabel("");
+  setView("progress");
   const sectionAgg = history.sectionSummary();
   const taskAgg = history.summary().sort((a, b) => a.section.localeCompare(b.section) || a.taskName.localeCompare(b.taskName));
   const weak = history.weakSpots(3);
@@ -471,13 +495,18 @@ function renderProgress() {
 
   if (total === 0) {
     app.innerHTML = `
+      <div class="back-row">
+        <button class="back-link" id="prog-back-top">← Back to home</button>
+        <span class="muted small">You're viewing: Progress</span>
+      </div>
       <div class="panel">
         <h1>📊 Progress</h1>
         <p>No attempts recorded yet. Practise some tasks and your scores will appear here.</p>
         <button class="primary" id="home">Back to home</button>
       </div>
     `;
-    app.querySelector("#home").addEventListener("click", renderHome);
+    app.querySelector("#home").addEventListener("click", goHome);
+    app.querySelector("#prog-back-top").addEventListener("click", goHome);
     return;
   }
 
@@ -518,6 +547,10 @@ function renderProgress() {
   }).join("");
 
   app.innerHTML = `
+    <div class="back-row">
+      <button class="back-link" id="prog-back-top">← Back to home</button>
+      <span class="muted small">You're viewing: Progress · ${total} attempts</span>
+    </div>
     <div class="panel">
       <h1>📊 Progress</h1>
       <p class="muted">${total} attempts recorded. Scores in PTE 0-90 scale (approximate).</p>
@@ -545,7 +578,8 @@ function renderProgress() {
       </div>
     </div>
   `;
-  app.querySelector("#home").addEventListener("click", renderHome);
+  app.querySelector("#home").addEventListener("click", goHome);
+  app.querySelector("#prog-back-top").addEventListener("click", goHome);
   app.querySelector("#reset-history").addEventListener("click", () => {
     if (confirm("Delete all recorded scores? This cannot be undone.")) {
       history.clearAll();
@@ -587,15 +621,26 @@ function isChromiumLike() {
 }
 
 function renderBrowserBanner() {
-  if (isChromiumLike()) return "";
-  return `
-    <div class="error" style="margin-top:12px;">
-      <strong>Your browser may not fully support this simulator.</strong>
-      The Speaking tasks rely on the Web Speech Recognition API, which is only fully supported in
-      Chromium-based browsers (Chrome, Edge, Brave, Arc). Reading, Writing, and Listening tasks
-      will work, but Speaking transcription will be unavailable.
-    </div>
-  `;
+  const banners = [];
+  const micReason = micUnavailableReason();
+  if (micReason) {
+    banners.push(`
+      <div class="error" style="margin-top:12px;">
+        <strong>Microphone unavailable.</strong> ${escapeHtml(micReason)}
+      </div>
+    `);
+  }
+  if (!isChromiumLike()) {
+    banners.push(`
+      <div class="error" style="margin-top:12px;">
+        <strong>Your browser may not fully support this simulator.</strong>
+        The Speaking tasks rely on the Web Speech Recognition API, which is only fully supported
+        in Chromium-based browsers (Chrome, Edge, Brave, Arc). Reading, Writing, and Listening
+        tasks will work, but Speaking transcription will be unavailable.
+      </div>
+    `);
+  }
+  return banners.join("");
 }
 
 function renderScoringModeBanner() {
@@ -675,13 +720,19 @@ async function generateAndPractise(taskId, triggerBtn) {
 }
 
 // ----------------- single-task run -----------------
+let abortRequested = false;
 async function runSingleTask(taskId) {
+  setView("task");
+  abortRequested = false;
   try {
     const result = await runTask(taskId, app);
+    setView("home");
     history.addScore(taskId, result?.score);
-    showScore(result, taskId, () => renderHome());
+    showScore(result, taskId, () => goHome());
   } catch (e) {
-    showError(e, () => renderHome());
+    setView("home");
+    if (abortRequested) { goHome(); return; }
+    showError(e, () => goHome());
   }
 }
 
@@ -799,8 +850,15 @@ const MINI_EXAMS = {
 };
 
 async function startExam(taskIds, examName = "Exam") {
+  setView("exam");
+  abortRequested = false;
   const results = [];
   for (let i = 0; i < taskIds.length; i++) {
+    if (abortRequested) {
+      setView("home");
+      goHome();
+      return;
+    }
     const id = taskIds[i];
     const progressHTML = `
       <div class="exam-progress">
@@ -813,15 +871,18 @@ async function startExam(taskIds, examName = "Exam") {
     app.innerHTML = progressHTML;
     try {
       const result = await runTask(id, app);
+      if (abortRequested) { setView("home"); goHome(); return; }
       history.addScore(id, result?.score);
       results.push({ taskId: id, result });
       await waitForContinue(app, i < taskIds.length - 1 ? "Next task" : "Show summary", result);
     } catch (e) {
+      if (abortRequested) { setView("home"); goHome(); return; }
       console.error(e);
       results.push({ taskId: id, error: e.message });
       await waitForContinue(app, "Skip", null, e.message);
     }
   }
+  setView("home");
   showExamSummary(results, examName);
 }
 
@@ -883,7 +944,7 @@ function showExamSummary(results, examName = "Exam") {
       </div>
     </div>
   `;
-  app.querySelector("#home").addEventListener("click", renderHome);
+  app.querySelector("#home").addEventListener("click", goHome);
 }
 
 // ----------------- score display -----------------
@@ -990,7 +1051,43 @@ async function openSettings() {
   dlg.showModal();
 }
 
-document.getElementById("about-btn").addEventListener("click", renderDocs);
+document.getElementById("brand-btn").addEventListener("click", () => {
+  if (currentView === "task" || currentView === "exam") {
+    if (!confirm("Exit the current task and go back to home? Your in-progress response will be lost.")) return;
+    abortRequested = true;
+    stopAllTaskAudio();
+  }
+  goHome();
+});
+
+document.getElementById("about-btn").addEventListener("click", () => {
+  if (currentView === "about") { goHome(); return; }
+  if (currentView === "task" || currentView === "exam") {
+    if (!confirm("Leave the current task and view About? Your in-progress response will be lost.")) return;
+    abortRequested = true;
+    stopAllTaskAudio();
+  }
+  renderDocs();
+});
+
+document.getElementById("exit-task-btn").addEventListener("click", () => {
+  if (!confirm(currentView === "exam"
+    ? "Exit the exam and discard remaining tasks?"
+    : "Exit this task? Your in-progress response will be lost.")) return;
+  abortRequested = true;
+  stopAllTaskAudio();
+  setView("home");
+  goHome();
+});
+
+// Best-effort cleanup when the user bails out mid-task. Cancels the
+// active countdown (so the topbar timer resets) and stops TTS. Recorder
+// and recognizer instances finish naturally — their DOM updates become
+// no-ops once innerHTML clears the elements they were targeting.
+function stopAllTaskAudio() {
+  abortActiveTask();
+}
+
 document.getElementById("settings-btn").addEventListener("click", openSettings);
 document.getElementById("save-settings").addEventListener("click", (e) => {
   e.preventDefault();

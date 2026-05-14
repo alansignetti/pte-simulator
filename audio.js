@@ -58,10 +58,50 @@ export function stopSpeaking() {
   speechSynthesis.cancel();
 }
 
+// Returns null if microphone access is available, or an explanatory string
+// if it's blocked by the browser context (file://, non-localhost HTTP, etc).
+// Use this for pre-flight checks before starting a Speaking task.
+export function micUnavailableReason() {
+  if (window.isSecureContext === false) {
+    return (
+      "Your browser is blocking microphone access because the page isn't a secure context. " +
+      "Speaking tasks need either HTTPS or http://localhost. " +
+      "If you opened the file directly (file://), start a local server instead: " +
+      "`cd pte-simulator && python3 -m http.server 8080` and open http://localhost:8080."
+    );
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+    return (
+      "Microphone access is not available in this browser context. " +
+      "Make sure you're on http://localhost or HTTPS, and using Chrome / Edge / Brave / Arc. " +
+      "Firefox does not support the Speech Recognition API required for transcription."
+    );
+  }
+  return null;
+}
+
 // Audio recorder for Speaking tasks. Returns { start, stop, getBlob }.
 // Also captures live audio levels so the UI can show a meter.
 export async function createRecorder({ onLevel } = {}) {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  const reason = micUnavailableReason();
+  if (reason) throw new Error(reason);
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    if (e.name === "NotAllowedError" || e.name === "PermissionDeniedError") {
+      throw new Error(
+        "You denied microphone access. To enable it: click the 🔒 icon next to the URL " +
+        "in your browser's address bar, set Microphone to 'Allow', and reload the page. " +
+        "On macOS also check System Settings → Privacy & Security → Microphone."
+      );
+    }
+    if (e.name === "NotFoundError" || e.name === "DevicesNotFoundError") {
+      throw new Error("No microphone detected. Plug one in and reload the page.");
+    }
+    throw new Error("Could not access the microphone: " + e.message);
+  }
   const mr = new MediaRecorder(stream);
   const chunks = [];
   mr.ondataavailable = (e) => {

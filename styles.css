@@ -33,7 +33,37 @@ html, body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.brand { font-weight: 600; letter-spacing: 0.5px; }
+.brand {
+  background: transparent;
+  border: none;
+  color: white;
+  font: inherit;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.15s;
+}
+.brand:hover { background: rgba(255,255,255,0.1); }
+.brand-mark {
+  background: var(--pte-accent);
+  color: white;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+.brand-text { font-weight: 500; opacity: 0.95; }
+
+.btn-ghost.active {
+  background: rgba(255,255,255,0.18);
+  border-color: white;
+}
 .topbar-right { display: flex; gap: 16px; align-items: center; }
 .task-label { color: #c9e4ee; font-size: 13px; }
 .timer {
@@ -845,3 +875,34 @@ fieldset[disabled] {
   margin-bottom: 12px;
 }
 .maker-card .social-links { display: flex; justify-content: flex-start; }
+
+/* Top back-row used by About and Progress */
+.back-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.back-link {
+  background: transparent;
+  border: 1px solid var(--pte-border);
+  color: var(--pte-blue);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  transition: background 0.15s, border-color 0.15s;
+}
+.back-link:hover {
+  background: #eef8fb;
+  border-color: var(--pte-accent);
+}
+
+/* Exit-task button in topbar */
+#exit-task-btn {
+  background: rgba(192, 57, 43, 0.2);
+  border-color: rgba(255,255,255,0.4);
+}
+#exit-task-btn:hover { background: rgba(192, 57, 43, 0.4); }
