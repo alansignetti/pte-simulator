@@ -83,11 +83,13 @@ async function callClaudeManual({ system, messages }) {
     responseEl.value = "";
     statusEl.textContent = "";
 
+    let settled = false;
     const cleanup = () => {
       copyBtn.removeEventListener("click", onCopy);
       submitBtn.removeEventListener("click", onSubmit);
       skipBtn.removeEventListener("click", onSkip);
-      dlg.close();
+      dlg.removeEventListener("cancel", onCancel);
+      if (dlg.open) dlg.close();
     };
 
     const onCopy = async () => {
@@ -110,18 +112,31 @@ async function callClaudeManual({ system, messages }) {
         statusEl.textContent = "Paste Claude's response first.";
         return;
       }
+      settled = true;
       cleanup();
       resolve(raw);
     };
 
     const onSkip = () => {
+      settled = true;
       cleanup();
       // Synthetic "skipped" JSON so scoring functions still resolve cleanly.
       resolve('{ "overall_0_90": null, "feedback": "Scoring skipped — no feedback available." }');
     };
 
+    // Pressing Escape (or the browser closing the dialog) fires "cancel"
+    // before "close". Without this handler the promise would hang and the
+    // task's Submit button would stay disabled forever.
+    const onCancel = () => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve('{ "overall_0_90": null, "feedback": "Scoring cancelled — dialog closed before submitting." }');
+    };
+
     copyBtn.addEventListener("click", onCopy);
     submitBtn.addEventListener("click", onSubmit);
+    dlg.addEventListener("cancel", onCancel);
     skipBtn.addEventListener("click", onSkip);
 
     dlg.showModal();

@@ -736,37 +736,58 @@ export const RENDERERS = {
       host.innerHTML = `
         <div class="panel task-content">
           <h2>Summarize Spoken Text</h2>
-          <p class="instruction">Listen to the audio, then write a 50-70 word summary. 10 minutes total.</p>
+          <p class="instruction">
+            Listen to the audio (it plays only once), then write a 50-70 word summary.
+            You can take notes in the box below while listening. 10 minutes total.
+          </p>
           <p><strong>${escapeHtml(item.title)}</strong></p>
           <div id="audio-status" class="muted">▶ Playing audio…</div>
-          <textarea class="essay" id="response" placeholder="Write your 50-70 word summary…" disabled></textarea>
+          <textarea class="essay" id="response" placeholder="Take notes here while listening, then write your 50-70 word summary…"></textarea>
           <div class="word-count"><span id="wc">0</span> words</div>
-          <button class="primary" id="submit" style="margin-top:12px;" disabled>Submit</button>
+          <div class="row" style="margin-top:12px;">
+            <button class="primary" id="submit">Submit for scoring</button>
+            <span class="spacer"></span>
+            <span id="submit-status" class="small muted"></span>
+          </div>
         </div>
       `;
       const ta = host.querySelector("#response");
       const wc = host.querySelector("#wc");
+      const submitBtn = host.querySelector("#submit");
+      const statusEl = host.querySelector("#submit-status");
       ta.addEventListener("input", () => { wc.textContent = wordCount(ta.value); });
-
-      await speak(item.transcript);
-      host.querySelector("#audio-status").textContent = "✓ Audio finished. Write your summary.";
-      ta.disabled = false;
-      host.querySelector("#submit").disabled = false;
       ta.focus();
 
       const cd = countdown(600);
       cd.promise.then((r) => { if (r === "done") submit(); });
 
+      // Audio plays once, in parallel with the typing window. Mirrors the
+      // real PTE where you only hear it once but timing is on you.
+      speak(item.transcript).then(() => {
+        host.querySelector("#audio-status").textContent = "✓ Audio finished. Finish your summary and submit.";
+      });
+
+      let submitting = false;
       async function submit() {
+        if (submitting) return;
+        submitting = true;
         cd.cancel(); clearTimer();
-        host.querySelector("#submit").disabled = true;
+        submitBtn.disabled = true;
+        statusEl.textContent = "Scoring…";
         const summary = ta.value.trim();
-        const score = await scoreSummarizeSpokenText({
-          originalTranscript: item.transcript, summary,
-        });
-        resolve({ item, summary, score });
+        try {
+          const score = await scoreSummarizeSpokenText({
+            originalTranscript: item.transcript, summary,
+          });
+          resolve({ item, summary, score });
+        } catch (e) {
+          // Re-enable so user can retry (e.g. if API key was wrong)
+          submitting = false;
+          submitBtn.disabled = false;
+          statusEl.textContent = "Scoring failed: " + (e.message || "unknown error") + " — click Submit to retry.";
+        }
       }
-      host.querySelector("#submit").addEventListener("click", submit);
+      submitBtn.addEventListener("click", submit);
     });
   },
 
